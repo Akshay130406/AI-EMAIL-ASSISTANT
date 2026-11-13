@@ -119,11 +119,11 @@ def google_callback(
         verifier = consume_oauth_transaction(
             session, state, request.cookies.get(OAUTH_STATE_COOKIE_NAME)
         )
-    except OAuthStateError as error:
+    except OAuthStateError as state_error:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="OAuth state validation failed",
-        ) from error
+        ) from state_error
 
     if error:
         return _login_error_redirect(

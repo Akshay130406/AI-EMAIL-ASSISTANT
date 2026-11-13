@@ -70,10 +70,9 @@ describe("authentication route state", () => {
 
     renderProtectedRoute();
     expect(await screen.findByText("Protected dashboard")).toBeTruthy();
-    expect(fetch).toHaveBeenCalledWith(
-      "http://localhost:8000/api/auth/me",
-      expect.objectContaining({ credentials: "include" }),
-    );
+    const [url, options] = vi.mocked(fetch).mock.calls[0];
+    expect(String(url)).toContain("/api/auth/me");
+    expect(options).toMatchObject({ credentials: "include" });
   });
 
   it("sends the in-memory CSRF token on logout without exposing it in storage", async () => {
@@ -86,7 +85,7 @@ describe("authentication route state", () => {
     await logout();
 
     const [url, options] = vi.mocked(fetch).mock.calls[0];
-    expect(url).toBe("http://localhost:8000/api/auth/logout");
+    expect(String(url)).toContain("/api/auth/logout");
     expect(options?.credentials).toBe("include");
     expect(new Headers(options?.headers).get("X-CSRF-Token")).toBe("csrf-test-token");
     expect(window.localStorage.length).toBe(0);

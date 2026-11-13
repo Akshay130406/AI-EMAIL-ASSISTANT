@@ -1,4 +1,10 @@
+import sys
+from pathlib import Path
 from logging.config import fileConfig
+
+backend_dir = str(Path(__file__).resolve().parents[1])
+if backend_dir not in sys.path:
+    sys.path.insert(0, backend_dir)
 
 from alembic import context
 from sqlalchemy import engine_from_config, pool
