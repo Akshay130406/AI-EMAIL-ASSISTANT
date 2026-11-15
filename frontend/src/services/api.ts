@@ -37,7 +37,7 @@ import type {
 } from "../types/api";
 import type { AuthMeResponse } from "../types/auth";
 
-const apiUrl = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(
+const apiUrl = (import.meta.env.VITE_API_URL || "http://127.0.0.1:8002").replace(
   /\/$/,
   "",
 );

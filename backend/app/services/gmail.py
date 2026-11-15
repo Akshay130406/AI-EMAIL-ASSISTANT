@@ -65,6 +65,10 @@ class GmailAPIUnavailable(GmailError):
     pass
 
 
+class GmailAPINotEnabled(GmailAPIUnavailable):
+    pass
+
+
 class GmailRateLimited(GmailAPIUnavailable):
     pass
 
@@ -436,6 +440,8 @@ def _execute(request: ResourceRequest) -> dict[str, object]:
         if code == 429:
             raise GmailRateLimited from error
         reasons = _google_error_reasons(error)
+        if reasons.intersection({"accessNotConfigured"}):
+            raise GmailAPINotEnabled from error
         if reasons.intersection({"authError", "insufficientPermissions"}):
             raise GmailReauthorizationRequired from error
         if reasons.intersection({"rateLimitExceeded", "userRateLimitExceeded"}):
@@ -462,6 +468,8 @@ def _execute_write(request: ResourceRequest) -> dict[str, object]:
         if code == 429:
             raise GmailRateLimited from error
         reasons = _google_error_reasons(error)
+        if reasons.intersection({"accessNotConfigured"}):
+            raise GmailAPINotEnabled from error
         if reasons.intersection({"authError", "insufficientPermissions"}):
             raise GmailReauthorizationRequired from error
         if reasons.intersection({"rateLimitExceeded", "userRateLimitExceeded"}):

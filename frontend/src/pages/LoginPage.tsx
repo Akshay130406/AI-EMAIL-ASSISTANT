@@ -9,6 +9,7 @@ const authErrors: Record<string, string> = {
   provider_error: "Google couldn't complete sign-in. Please try again.",
   sign_in_failed: "We couldn't verify your Google account. Please try again.",
   not_configured: "Google sign-in isn't configured yet. Contact the administrator.",
+  service_unavailable: "Sign-in is temporarily unavailable because the server could not save your session. Please try again shortly.",
 };
 
 export default function LoginPage() {

@@ -53,10 +53,10 @@ frontend origin to **Authorized JavaScript origins** and the exact backend
 callback URIs to **Authorized redirect URIs**:
 
 ```text
-Local origin:   http://localhost:5173
-Login callback: http://localhost:8000/api/auth/google/callback
-Gmail callback: http://localhost:8000/api/integrations/gmail/callback
-Calendar callback: http://localhost:8000/api/integrations/calendar/callback
+Local origin:   http://127.0.0.1:5174
+Login callback: http://127.0.0.1:8002/api/auth/google/callback
+Gmail callback: http://127.0.0.1:8002/api/integrations/gmail/callback
+Calendar callback: http://127.0.0.1:8002/api/integrations/calendar/callback
 ```
 
 Normal sign-in requests only `openid email profile`. Gmail connection is a
@@ -87,7 +87,9 @@ Gmail's response is ambiguous, the draft is marked `unknown` and cannot be sent
 again automatically. Users should verify the message in Gmail before taking
 further action.
 
-Copy the example files and replace all placeholder values in `backend/.env`.
+Create `backend/.env` from the example only when it does not already exist;
+update local settings without overwriting an existing environment file. Set
+`frontend/.env` to `VITE_API_URL=http://127.0.0.1:8002` for this local setup.
 Generate `SESSION_SECRET` with a secure random generator (at least 32
 characters); use a different value in every environment. The configured
 `GOOGLE_REDIRECT_URI`, `GMAIL_REDIRECT_URI`, and `CALENDAR_REDIRECT_URI` must
@@ -103,18 +105,17 @@ In the backend terminal:
 
 ```powershell
 cd backend
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-Copy-Item .env.example .env
-python -m pip install -r requirements.txt
-alembic upgrade head
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+if (!(Test-Path .venv)) { python -m venv .venv }
+if (!(Test-Path .env)) { Copy-Item .env.example .env }
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m alembic upgrade head
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8002
 ```
 
 You can also start the backend from the repository root with:
 
 ```powershell
-.\backend\.venv\Scripts\python.exe -m uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
+.\backend\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir backend --reload --host 127.0.0.1 --port 8002
 ```
 
 The root-level legacy `app.py` and `main.py` remain unchanged; the backend
@@ -125,14 +126,15 @@ In another terminal:
 
 ```powershell
 cd frontend
-Copy-Item .env.example .env.local
+if (!(Test-Path .env)) { Copy-Item .env.example .env }
 npm install
 npm run dev
 ```
 
-Open `http://localhost:5173`. For local OAuth, frontend and backend URLs use
-the same `localhost` hostname so the development `SameSite=Lax` cookie is
-shared correctly. Set `VITE_API_URL` if the backend is hosted elsewhere.
+Open `http://127.0.0.1:5174` and use this exact host consistently for local
+OAuth and session cookies. Stop and restart Vite with Ctrl+C and the same
+command. Vite is configured to fail if port 5174 is already occupied. Check
+backend health, readiness, and docs on port 8002.
 
 ## Production settings
 
@@ -365,7 +367,7 @@ without automatic retries to avoid duplicate charges.
   persisted user-scoped messages and identify whether the displayed data is
   Gmail-backed or sample data; unsupported response-rate/productivity metrics
   are intentionally omitted.
-- OpenAPI documentation: `http://localhost:8000/docs`
+- OpenAPI documentation: `http://127.0.0.1:8002/docs`
 - Apply schema changes explicitly with `alembic upgrade head`; application
   startup does not run migrations.
 

@@ -44,7 +44,7 @@ def get_app_env() -> str:
 def get_cors_origins() -> list[str]:
     configured_origins = os.getenv(
         "ALLOWED_ORIGINS",
-        os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"),
+        os.getenv("CORS_ORIGINS", "http://localhost:5174,http://127.0.0.1:5174"),
     )
     return [
         origin.strip().rstrip("/")
@@ -58,7 +58,24 @@ def get_database_url() -> str:
 
 
 def get_frontend_url() -> str:
-    return os.getenv("FRONTEND_URL", "http://localhost:5173").strip().rstrip("/")
+    value = os.getenv("FRONTEND_URL", "http://127.0.0.1:5174").strip().rstrip("/")
+    parsed = urlparse(value)
+    local_http = (
+        get_app_env() == "development"
+        and parsed.scheme == "http"
+        and parsed.hostname in {"localhost", "127.0.0.1"}
+    )
+    if (
+        parsed.scheme != "https" and not local_http
+        or not parsed.netloc
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.path
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ConfigurationError("FRONTEND_URL must be a trusted HTTPS origin")
+    return value
 
 
 def get_session_secret() -> str:

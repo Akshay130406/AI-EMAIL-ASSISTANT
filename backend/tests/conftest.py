@@ -1,5 +1,11 @@
 import asyncio
+import sys
 from collections.abc import Iterator
+from pathlib import Path
+
+backend_path = str(Path(__file__).resolve().parents[1])
+if backend_path not in sys.path:
+    sys.path.insert(0, backend_path)
 
 import httpx
 import pytest

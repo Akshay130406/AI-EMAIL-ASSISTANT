@@ -5,11 +5,12 @@ import {
   CalendarClock,
   CalendarDays,
   Mail,
+  RefreshCw,
   Sparkles,
   Star,
 } from "lucide-react";
 import { Link } from "react-router-dom";
-import { Card, DemoNotice, PageHeading } from "../components/ui";
+import { Button, Card, DemoNotice, PageHeading } from "../components/ui";
 import { useAuth } from "../contexts/AuthContext";
 import {
   getAIInsights,
@@ -19,6 +20,7 @@ import {
   getGmailStatus,
   listCalendarEvents,
   listEmails,
+  syncGmail,
 } from "../services/api";
 import type {
   AIInsights,
@@ -52,9 +54,35 @@ export default function DashboardPage() {
   const [priorityEmails, setPriorityEmails] = useState<EmailRecord[]>([]);
   const [meetings, setMeetings] = useState<CalendarEventRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [syncNotice, setSyncNotice] = useState<string | null>(null);
   const [coreError, setCoreError] = useState<string | null>(null);
   const [aiError, setAIError] = useState<string | null>(null);
   const [calendarError, setCalendarError] = useState<string | null>(null);
+
+  async function handleSync() {
+    if (syncing || !gmail?.connected) return;
+    setSyncing(true);
+    setSyncNotice(null);
+    try {
+      const result = await syncGmail();
+      setSyncNotice(`${result.synced} message${result.synced === 1 ? "" : "s"} synchronized.`);
+      const [dash, gmailStatus, analyticsData, emailPage] = await Promise.all([
+        getDashboardOverview(),
+        getGmailStatus(),
+        getAnalyticsOverview(7),
+        listEmails({ page: 1, page_size: 5, priority: true, unread: true }),
+      ]);
+      setOverview(dash);
+      setGmail(gmailStatus);
+      setAnalytics(analyticsData);
+      setPriorityEmails(emailPage.items);
+    } catch (reason) {
+      setSyncNotice(reason instanceof Error ? reason.message : "Gmail synchronization failed.");
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   useEffect(() => {
     let active = true;
@@ -148,8 +176,23 @@ export default function DashboardPage() {
         eyebrow={new Intl.DateTimeFormat(undefined, { dateStyle: "full" }).format(new Date())}
         title={`Good day, ${userName}`}
         description="A measured overview of your connected workspace."
-        action={<DemoNotice>{sourceNotice}</DemoNotice>}
+        action={
+          <div className="flex items-center gap-2">
+            {gmail?.connected && (
+              <Button onClick={handleSync} disabled={syncing}>
+                <RefreshCw size={14} className={syncing ? "animate-spin" : ""} />
+                {syncing ? "Syncing…" : "Sync inbox"}
+              </Button>
+            )}
+            <DemoNotice>{sourceNotice}</DemoNotice>
+          </div>
+        }
       />
+      {syncNotice && (
+        <p role="status" className="mb-5 rounded-xl border border-accent/20 bg-accent/5 px-4 py-3 text-xs text-accent">
+          {syncNotice}
+        </p>
+      )}
       {coreError && (
         <p role="alert" className="mb-5 rounded-xl border border-rose-500/20 bg-rose-500/5 px-4 py-3 text-xs text-rose-700 dark:text-rose-300">
           {coreError}
@@ -247,7 +290,17 @@ export default function DashboardPage() {
               <Link to="/inbox" className="inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline">View inbox <ArrowRight size={13} /></Link>
             </div>
             {priorityEmails.length === 0 ? (
-              <p className="text-xs text-muted">No unread priority messages are available in the selected dataset.</p>
+              <div className="py-2 text-xs text-muted">
+                <p>No unread priority messages are available in the selected dataset.</p>
+                {gmail?.connected && (
+                  <div className="mt-3">
+                    <Button onClick={handleSync} disabled={syncing}>
+                      <RefreshCw size={13} className={syncing ? "animate-spin" : ""} />
+                      {syncing ? "Syncing emails…" : "Sync inbox now"}
+                    </Button>
+                  </div>
+                )}
+              </div>
             ) : (
               <div className="divide-y divide-line">
                 {priorityEmails.map((email) => (

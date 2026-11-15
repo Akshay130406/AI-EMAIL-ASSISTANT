@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  AlertCircle,
   ArrowLeft,
   ChevronLeft,
   ChevronRight,
+  ExternalLink,
   Mail,
   RefreshCw,
   Search,
@@ -68,6 +70,7 @@ export default function GmailInboxPage({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const syncInFlightRef = useRef(false);
   const [classification, setClassification] = useState<AIClassification | null>(null);
   const [classifications, setClassifications] = useState<Record<string, AIClassification>>({});
   const [summary, setSummary] = useState<AIEmailSummary | null>(null);
@@ -214,6 +217,8 @@ export default function GmailInboxPage({
   }
 
   async function handleSync() {
+    if (syncInFlightRef.current) return;
+    syncInFlightRef.current = true;
     setSyncing(true);
     setNotice(null);
     setError(null);
@@ -226,9 +231,33 @@ export default function GmailInboxPage({
       setError(reason instanceof APIError ? reason.message : "Gmail synchronization failed.");
       onConnectionChange();
     } finally {
+      syncInFlightRef.current = false;
       setSyncing(false);
     }
   }
+
+  const initialSyncRef = useRef(false);
+  useEffect(() => {
+    if (connection.connected && !connection.last_synced_at && !initialSyncRef.current) {
+      initialSyncRef.current = true;
+      void handleSync();
+    }
+  }, [connection.connected, connection.last_synced_at]);
+
+  useEffect(() => {
+    if (!connection.connected) return;
+    const interval = setInterval(() => {
+      void handleSync();
+    }, 180000);
+    const handleFocus = () => {
+      void handleSync();
+    };
+    window.addEventListener("focus", handleFocus);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", handleFocus);
+    };
+  }, [connection.connected]);
 
   const title = folder === "starred" ? "Starred" : folder === "inbox" ? "Inbox" : folder === "sent" ? "Sent" : "Drafts";
   const supportedFolder =
@@ -253,7 +282,26 @@ export default function GmailInboxPage({
         </p>
       )}
       {notice && <p role="status" className="mb-4 text-xs text-green-700 dark:text-green-400">{notice}</p>}
-      {error && <p role="alert" className="mb-4 rounded-xl border border-rose-500/20 bg-rose-500/5 px-4 py-3 text-xs text-rose-700 dark:text-rose-400">{error}</p>}
+      {error && (
+        <div role="alert" className="mb-4 rounded-xl border border-rose-500/20 bg-rose-500/5 px-4 py-3 text-xs text-rose-700 dark:text-rose-400">
+          <div className="flex items-start gap-2">
+            <AlertCircle size={16} className="mt-0.5 shrink-0" />
+            <div className="flex-1">
+              <p className="font-medium">{error}</p>
+              {error.toLowerCase().includes("google cloud") && (
+                <a
+                  href="https://console.developers.google.com/apis/api/gmail.googleapis.com/overview"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-2 inline-flex items-center gap-1 font-semibold text-accent underline hover:opacity-80"
+                >
+                  Enable Gmail API in Google Cloud Console <ExternalLink size={12} />
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       {!supportedFolder ? (
         <div className="rounded-2xl border border-line bg-panel p-10 text-center text-sm text-muted">
           This Gmail view is not available yet. No sample messages are shown while Gmail data is connected.
@@ -291,8 +339,18 @@ export default function GmailInboxPage({
             ) : (
               <div className="px-6 py-16 text-center">
                 <div className="mx-auto mb-3 grid size-10 place-items-center rounded-xl bg-soft text-muted"><Mail size={17} /></div>
-                <p className="text-sm font-medium">No Gmail messages found</p>
-                <p className="mt-1 text-xs text-muted">Try another search or synchronize your inbox.</p>
+                <p className="text-sm font-semibold text-main">No Gmail messages found</p>
+                <p className="mt-1 text-xs text-muted">
+                  {connection.last_synced_at
+                    ? `Last synced: ${formatDate(connection.last_synced_at)}. Synchronize to check for new messages.`
+                    : "Your Gmail account is connected. Synchronize to download your inbox messages."}
+                </p>
+                <div className="mt-4">
+                  <Button onClick={handleSync} disabled={syncing || !connection.connected}>
+                    <RefreshCw size={14} className={syncing ? "animate-spin" : ""} />
+                    {syncing ? "Syncing emails…" : "Sync inbox now"}
+                  </Button>
+                </div>
               </div>
             )}
             <div className="flex items-center justify-between border-t border-line px-4 py-3 text-[10px] text-muted">

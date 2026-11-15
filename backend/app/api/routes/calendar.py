@@ -52,6 +52,8 @@ from app.services.calendar import (
     CALENDAR_LIST_SCOPE,
     CALENDAR_PROVIDER,
     CALENDAR_SCOPES,
+    CalendarAPIUnavailable,
+    CalendarAPINotEnabled,
     CalendarError,
     CalendarEventAlreadyExists,
     CalendarEventNotFound,
@@ -115,6 +117,11 @@ def _raise_calendar_error(error: CalendarError | ConfigurationError) -> HTTPExce
         return HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Google Calendar integration is not configured",
+        )
+    if isinstance(error, CalendarAPINotEnabled):
+        return HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Google Calendar API is not enabled in your Google Cloud project. Please enable it in Google Cloud Console and try again.",
         )
     if isinstance(error, CalendarNotConnected):
         return HTTPException(

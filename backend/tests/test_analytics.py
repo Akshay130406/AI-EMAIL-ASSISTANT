@@ -65,9 +65,10 @@ def test_analytics_uses_only_connected_users_gmail_data(
                 status="connected",
             )
         )
-        _insert_email(session, user.id, "sample", day=date.today())
-        _insert_email(session, user.id, "gmail", day=date.today(), read=False)
-        _insert_email(session, foreign.id, "gmail", day=date.today(), sent=True)
+        utc_today = datetime.now(timezone.utc).date()
+        _insert_email(session, user.id, "sample", day=utc_today)
+        _insert_email(session, user.id, "gmail", day=utc_today, read=False)
+        _insert_email(session, foreign.id, "gmail", day=utc_today, sent=True)
         session.commit()
 
     response = client.get("/api/analytics/overview?period_days=7")

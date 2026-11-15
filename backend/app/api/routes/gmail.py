@@ -35,6 +35,7 @@ from app.services.gmail import (
     GMAIL_COMPOSE_SCOPE,
     GMAIL_READONLY_SCOPE,
     GmailAPIUnavailable,
+    GmailAPINotEnabled,
     GmailNotConnected,
     GmailRateLimited,
     GmailReauthorizationRequired,
@@ -397,6 +398,11 @@ def gmail_sync(
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Gmail rate limit reached; try again shortly",
+        ) from error
+    except GmailAPINotEnabled as error:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Gmail API is not enabled in your Google Cloud project. Please enable it in Google Cloud Console and try again.",
         ) from error
     except (GmailAPIUnavailable, ConfigurationError, ValueError) as error:
         raise HTTPException(

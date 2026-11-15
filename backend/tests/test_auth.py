@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 import base64
 from urllib.parse import parse_qs, urlparse
 import pytest
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import select
 
 from app.api.dependencies import SESSION_COOKIE_NAME
@@ -315,6 +316,37 @@ def test_token_exchange_provider_failure_is_reported_without_details(
     )
     assert response.status_code == 303
     assert response.headers["location"].endswith("/login?auth_error=sign_in_failed")
+
+
+def test_oauth_database_failure_redirects_to_recoverable_login_error(client, monkeypatch):
+    from app.api.routes import auth
+
+    configure_google(monkeypatch)
+
+    def fail_transaction(*_args, **_kwargs):
+        raise SQLAlchemyError("database detail must not escape")
+
+    monkeypatch.setattr(auth, "create_oauth_transaction", fail_transaction)
+    response = client.get("/api/auth/google", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"] == (
+        "http://localhost:5173/login?auth_error=service_unavailable"
+    )
+    assert "database detail" not in response.text
+
+
+def test_invalid_frontend_redirect_uses_safe_local_fallback(client, monkeypatch):
+    from app.api.routes import auth
+
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("FRONTEND_URL", "https://attacker.example/path")
+
+    response = auth._login_error_redirect("sign_in_failed")
+
+    assert response.headers["location"] == (
+        "http://127.0.0.1:5174/login?auth_error=sign_in_failed"
+    )
     assert "provider detail" not in response.headers["location"]
 
 

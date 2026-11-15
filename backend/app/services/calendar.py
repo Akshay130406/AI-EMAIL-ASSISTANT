@@ -56,6 +56,10 @@ class CalendarAPIUnavailable(CalendarError):
     pass
 
 
+class CalendarAPINotEnabled(CalendarAPIUnavailable):
+    pass
+
+
 class CalendarWriteOutcomeUnknown(CalendarAPIUnavailable):
     pass
 
@@ -228,6 +232,8 @@ def _execute(request: CalendarRequest) -> dict[str, object]:
         if code == 429:
             raise CalendarRateLimited from error
         reasons = _google_error_reasons(error)
+        if reasons.intersection({"accessNotConfigured"}):
+            raise CalendarAPINotEnabled from error
         if reasons.intersection({"authError", "insufficientPermissions"}):
             raise CalendarReauthorizationRequired from error
         if reasons.intersection({"rateLimitExceeded", "userRateLimitExceeded"}):
@@ -256,6 +262,8 @@ def _execute_write(request: CalendarRequest) -> dict[str, object] | None:
         if code == 404:
             raise CalendarEventNotFound from error
         reasons = _google_error_reasons(error)
+        if reasons.intersection({"accessNotConfigured"}):
+            raise CalendarAPINotEnabled from error
         if reasons.intersection({"authError", "insufficientPermissions"}):
             raise CalendarReauthorizationRequired from error
         if reasons.intersection({"rateLimitExceeded", "userRateLimitExceeded"}):

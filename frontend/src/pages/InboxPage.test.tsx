@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import InboxPage from "./InboxPage";
 
@@ -10,7 +10,10 @@ const api = vi.hoisted(() => ({
   syncGmail: vi.fn(),
 }));
 
-vi.mock("../services/api", () => api);
+vi.mock("../services/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../services/api")>()),
+  ...api,
+}));
 
 function renderInbox() {
   return render(
@@ -26,6 +29,7 @@ describe("inbox Gmail connection states", () => {
     api.listEmails.mockReset();
     api.getEmailThread.mockReset();
     api.syncGmail.mockReset();
+    api.syncGmail.mockResolvedValue({ synced: 0, incremental: false });
   });
 
   afterEach(cleanup);
@@ -93,6 +97,30 @@ describe("inbox Gmail connection states", () => {
     api.listEmails.mockRejectedValue(new Error("network unavailable"));
     fireEvent.change(screen.getByLabelText("Search Gmail"), { target: { value: "query" } });
     expect(await screen.findByRole("alert")).toBeTruthy();
+  });
+
+  it("does not overlap the initial sync with a focus-triggered sync", async () => {
+    api.getGmailStatus.mockResolvedValue({
+      connected: true,
+      email: "reader@example.test",
+      status: "connected",
+      last_synced_at: null,
+      requires_reconnect: false,
+      compose_enabled: false,
+    });
+    api.listEmails.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 20 });
+    let finishSync!: (value: { synced: number; incremental: boolean }) => void;
+    api.syncGmail.mockReturnValue(
+      new Promise((resolve) => {
+        finishSync = resolve;
+      }),
+    );
+
+    renderInbox();
+    await waitFor(() => expect(api.syncGmail).toHaveBeenCalledTimes(1));
+    fireEvent(window, new Event("focus"));
+    expect(api.syncGmail).toHaveBeenCalledTimes(1);
+    finishSync({ synced: 0, incremental: false });
   });
 
   it("does not fall back to sample messages when Gmail status cannot be verified", async () => {

@@ -4,6 +4,7 @@ from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import RedirectResponse
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import (
@@ -58,8 +59,14 @@ def _delete_oauth_cookie(response: Response) -> None:
 
 
 def _login_error_redirect(error: str) -> RedirectResponse:
+    try:
+        frontend_url = get_frontend_url()
+    except ConfigurationError:
+        # Never use an invalid configured URL as an OAuth redirect target.
+        logger.error("OAuth frontend redirect URL is invalid")
+        frontend_url = "http://127.0.0.1:5174"
     response = RedirectResponse(
-        f"{get_frontend_url()}/login?auth_error={error}",
+        f"{frontend_url}/login?auth_error={error}",
         status_code=status.HTTP_303_SEE_OTHER,
     )
     _delete_oauth_cookie(response)
@@ -77,6 +84,10 @@ def google_login(session: Session = Depends(get_db)) -> RedirectResponse:
         state, _, challenge = create_oauth_transaction(session)
     except ConfigurationError:
         return _login_error_redirect("not_configured")
+    except SQLAlchemyError as error:
+        session.rollback()
+        logger.warning("Google OAuth transaction could not be stored (%s)", type(error).__name__)
+        return _login_error_redirect("service_unavailable")
     authorization_parameters = {
         "client_id": config.client_id,
         "redirect_uri": config.redirect_uri,
@@ -124,6 +135,10 @@ def google_callback(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="OAuth state validation failed",
         ) from state_error
+    except SQLAlchemyError as error:
+        session.rollback()
+        logger.warning("Google OAuth state could not be verified (%s)", type(error).__name__)
+        return _login_error_redirect("service_unavailable")
 
     if error:
         return _login_error_redirect(
@@ -144,6 +159,10 @@ def google_callback(
     except (ConfigurationError, GoogleOAuthError, GoogleIdentityError) as error:
         logger.warning("Google OAuth callback rejected (%s)", type(error).__name__)
         return _login_error_redirect("sign_in_failed")
+    except SQLAlchemyError as error:
+        session.rollback()
+        logger.warning("Google OAuth session could not be stored (%s)", type(error).__name__)
+        return _login_error_redirect("service_unavailable")
 
     response = RedirectResponse(
         get_frontend_url(), status_code=status.HTTP_303_SEE_OTHER
