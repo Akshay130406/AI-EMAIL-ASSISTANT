@@ -64,7 +64,7 @@ def _login_error_redirect(error: str) -> RedirectResponse:
     except ConfigurationError:
         # Never use an invalid configured URL as an OAuth redirect target.
         logger.error("OAuth frontend redirect URL is invalid")
-        frontend_url = "http://127.0.0.1:5174"
+        frontend_url = "http://localhost:5174"
     response = RedirectResponse(
         f"{frontend_url}/login?auth_error={error}",
         status_code=status.HTTP_303_SEE_OTHER,

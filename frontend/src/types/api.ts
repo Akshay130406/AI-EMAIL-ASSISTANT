@@ -47,6 +47,42 @@ export interface GmailSyncResult {
   incremental: boolean;
 }
 
+export interface AutoReplySettings {
+  enabled: boolean;
+  automatic_sending_enabled: boolean;
+  mode: "off" | "draft" | "automatic_send";
+  interval_minutes: number;
+  daily_limit: number;
+  reply_required_only: boolean;
+  exclude_sensitive: boolean;
+  allowed_senders: string[];
+  blocked_senders: string[];
+  include_keywords: string[];
+  exclude_keywords: string[];
+  next_run_at: string | null;
+  gmail_connected: boolean;
+  compose_enabled: boolean;
+}
+
+export interface AutoReplyActivity {
+  id: string;
+  email_id: string;
+  email_subject: string;
+  email_sender: string;
+  status: "processing" | "draft_created" | "sent" | "skipped" | "failed" | "unknown";
+  reason_code: string | null;
+  gmail_draft_id: string | null;
+  gmail_message_id: string | null;
+  created_at: string;
+}
+
+export interface AutoReplyActivityPage {
+  items: AutoReplyActivity[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
 export interface DraftRecord extends Timestamped {
   user_id: string;
   recipient: string | null;

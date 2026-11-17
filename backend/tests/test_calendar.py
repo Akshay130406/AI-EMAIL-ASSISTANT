@@ -29,11 +29,11 @@ def _configure_calendar(monkeypatch):
     monkeypatch.setenv("GOOGLE_CLIENT_ID", "test-client-id")
     monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "test-client-secret")
     monkeypatch.setenv(
-        "GOOGLE_REDIRECT_URI", "http://localhost:8000/api/auth/google/callback"
+        "GOOGLE_REDIRECT_URI", "http://localhost:8002/api/auth/google/callback"
     )
     monkeypatch.setenv(
         "CALENDAR_REDIRECT_URI",
-        "http://localhost:8000/api/integrations/calendar/callback",
+        "http://localhost:8002/api/integrations/calendar/callback",
     )
     monkeypatch.setenv("TOKEN_ENCRYPTION_KEY", key)
     monkeypatch.setenv("TOKEN_ENCRYPTION_KEY_ID", "test-key")

@@ -58,7 +58,7 @@ def get_database_url() -> str:
 
 
 def get_frontend_url() -> str:
-    value = os.getenv("FRONTEND_URL", "http://127.0.0.1:5174").strip().rstrip("/")
+    value = os.getenv("FRONTEND_URL", "http://localhost:5174").strip().rstrip("/")
     parsed = urlparse(value)
     local_http = (
         get_app_env() == "development"

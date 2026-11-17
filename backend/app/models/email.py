@@ -35,6 +35,7 @@ class Email(Base):
     is_sent: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     is_starred: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     is_priority: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    has_attachments: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     received_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

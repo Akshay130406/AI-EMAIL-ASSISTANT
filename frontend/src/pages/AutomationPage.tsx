@@ -4,6 +4,7 @@ import {
   BellRing,
   Check,
   Clock3,
+  Flame,
   Mail,
   Play,
   RefreshCw,
@@ -16,17 +17,23 @@ import { Button, Card, DemoNotice, PageHeading } from "../components/ui";
 import {
   cancelBackgroundJob,
   createAutomation,
+  emergencyOffAutoReplies,
+  getAutoReplyActivity,
+  getAutoReplySettings,
   getGmailStatus,
   listAutomations,
   listBackgroundJobs,
   listNotifications,
   runAutomation,
   updateAutomation,
+  updateAutoReplySettings,
   updateNotification,
 } from "../services/api";
 import type {
   AutomationKind,
   AutomationRecord,
+  AutoReplyActivity,
+  AutoReplySettings,
   BackgroundJobRecord,
   GmailStatus,
   NotificationRecord,
@@ -98,6 +105,11 @@ export default function AutomationPage() {
   const [automations, setAutomations] = useState<AutomationRecord[]>([]);
   const [jobs, setJobs] = useState<BackgroundJobRecord[]>([]);
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
+  const [autoReplySettings, setAutoReplySettings] = useState<AutoReplySettings | null>(null);
+  const [autoReplyActivity, setAutoReplyActivity] = useState<AutoReplyActivity[]>([]);
+  const [autoReplyRules, setAutoReplyRules] = useState({
+    allowed_senders: "", blocked_senders: "", include_keywords: "", exclude_keywords: "",
+  });
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
@@ -113,17 +125,27 @@ export default function AutomationPage() {
     setLoading(true);
     setError(null);
     try {
-      const [gmailStatus, rules, jobPage, notificationPage] = await Promise.all([
+      const [gmailStatus, rules, jobPage, notificationPage, replySettings, replyActivity] = await Promise.all([
         getGmailStatus(),
         listAutomations(),
         listBackgroundJobs({ page_size: 10 }),
         listNotifications({ page_size: 10 }),
+        getAutoReplySettings(),
+        getAutoReplyActivity(10),
       ]);
       setGmail(gmailStatus);
       setAutomations(rules);
       setJobs(jobPage.items);
       setNotifications(notificationPage.items);
       setUnreadCount(notificationPage.unread_count);
+      setAutoReplySettings(replySettings);
+      setAutoReplyActivity(replyActivity.items);
+      setAutoReplyRules({
+        allowed_senders: replySettings.allowed_senders.join(", "),
+        blocked_senders: replySettings.blocked_senders.join(", "),
+        include_keywords: replySettings.include_keywords.join(", "),
+        exclude_keywords: replySettings.exclude_keywords.join(", "),
+      });
     } catch (reason) {
       setError(
         reason instanceof Error
@@ -255,6 +277,62 @@ export default function AutomationPage() {
     }
   }
 
+  async function updateReplySettings(patch: Parameters<typeof updateAutoReplySettings>[0], label: string) {
+    setBusy("auto-reply");
+    setError(null);
+    setNotice(null);
+    try {
+      const updated = await updateAutoReplySettings(patch);
+      setAutoReplySettings(updated);
+      setNotice(label);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Automatic reply settings could not be saved.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function toggleAutoReplies() {
+    if (!autoReplySettings) return;
+    const enable = !autoReplySettings.enabled;
+    if (enable && !window.confirm("Enable automatic replies in draft-only mode? Gemini will create Gmail drafts for matching new emails. Nothing will be sent.")) return;
+    await updateReplySettings({ enabled: enable }, enable ? "Automatic replies enabled in draft-only mode." : "Automatic replies paused.");
+  }
+
+  async function toggleAutomaticSending() {
+    if (!autoReplySettings) return;
+    const enable = !autoReplySettings.automatic_sending_enabled;
+    if (enable && !window.confirm(`Enable automatic sending? Mailmind may send Gemini-generated replies to matching senders, up to ${autoReplySettings.daily_limit} per day. Sensitive emails remain excluded. You can turn this off at any time.`)) return;
+    await updateReplySettings({
+      automatic_sending_enabled: enable,
+      ...(enable ? { confirm_automatic_sending: true } : {}),
+    }, enable ? "Automatic sending enabled by your confirmation." : "Automatic sending disabled. Draft mode remains available.");
+  }
+
+  async function saveAutoReplyRules() {
+    const split = (value: string) => value.split(",").map((item) => item.trim()).filter(Boolean);
+    await updateReplySettings({
+      allowed_senders: split(autoReplyRules.allowed_senders),
+      blocked_senders: split(autoReplyRules.blocked_senders),
+      include_keywords: split(autoReplyRules.include_keywords),
+      exclude_keywords: split(autoReplyRules.exclude_keywords),
+    }, "Automatic reply rules saved.");
+  }
+
+  async function emergencyStopAutoReplies() {
+    setBusy("auto-reply");
+    setError(null);
+    try {
+      const updated = await emergencyOffAutoReplies();
+      setAutoReplySettings(updated);
+      setNotice("Emergency OFF is active. Automatic replies and sending are disabled.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Emergency OFF could not be confirmed.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <div>
       <PageHeading
@@ -365,6 +443,42 @@ export default function AutomationPage() {
           );
         })}
       </div>
+      <Card className="mt-5 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold">Gemini automatic replies</h2>
+            <p className="mt-1 max-w-3xl text-xs leading-5 text-muted">Off by default. Draft mode creates editable Gmail drafts. Automatic sending is a separate opt-in and requires a second explicit confirmation. New messages are checked by the background worker at the configured interval.</p>
+          </div>
+          <span className={`rounded px-2 py-1 text-[10px] font-semibold uppercase ${autoReplySettings?.mode === "automatic_send" ? "bg-rose-500/10 text-rose-600" : autoReplySettings?.mode === "draft" ? "bg-amber-500/10 text-amber-700" : "bg-soft text-muted"}`}>{autoReplySettings?.mode.replace("_", " ") ?? "loading"}</span>
+        </div>
+        {autoReplySettings && <>
+          {(!autoReplySettings.gmail_connected || !autoReplySettings.compose_enabled) && <p className="mt-3 rounded-lg bg-amber-500/10 p-3 text-[11px] text-amber-800">Connect Gmail and enable Gmail draft access in Settings to run this feature.</p>}
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button disabled={busy !== null || !autoReplySettings.gmail_connected || !autoReplySettings.compose_enabled} onClick={() => void toggleAutoReplies()}>{autoReplySettings.enabled ? "Pause automatic replies" : "Enable draft mode"}</Button>
+            <Button disabled={busy !== null || !autoReplySettings.enabled || !autoReplySettings.compose_enabled} onClick={() => void toggleAutomaticSending()}>{autoReplySettings.automatic_sending_enabled ? "Disable automatic sending" : "Enable automatic sending…"}</Button>
+            <Button disabled={busy !== null || (!autoReplySettings.enabled && !autoReplySettings.automatic_sending_enabled)} onClick={() => void emergencyStopAutoReplies()}><Flame size={13} /> Emergency OFF</Button>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <label className="text-[10px] text-muted">Check interval<select className="input mt-1 h-9 w-full text-xs" value={autoReplySettings.interval_minutes} disabled={busy !== null} onChange={(event) => void updateReplySettings({ interval_minutes: Number(event.target.value) }, "Reply check interval updated.")}><option value={15}>Every 15 minutes</option><option value={30}>Every 30 minutes</option><option value={60}>Every hour</option><option value={240}>Every 4 hours</option><option value={1440}>Daily</option></select></label>
+            <label className="text-[10px] text-muted">Maximum sent per day<input className="input mt-1 h-9 w-full text-xs" type="number" min={1} max={50} value={autoReplySettings.daily_limit} disabled={busy !== null} onChange={(event) => setAutoReplySettings({ ...autoReplySettings, daily_limit: Number(event.target.value) })} onBlur={() => void updateReplySettings({ daily_limit: Math.max(1, Math.min(50, autoReplySettings.daily_limit || 1)) }, "Daily sending limit updated.")} /></label>
+            <label className="flex items-center gap-2 pt-5 text-[11px] text-subtle"><input type="checkbox" checked={autoReplySettings.reply_required_only} onChange={(event) => void updateReplySettings({ reply_required_only: event.target.checked }, "Reply-required filter updated.")} />Reply only when Gemini identifies a response is needed</label>
+            <p className="flex items-center gap-2 text-[11px] text-subtle"><span aria-hidden="true">🔒</span>Sensitive text and messages with attachments are always excluded</p>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {([
+              ["allowed_senders", "Only these senders (optional)", "person@example.com, @company.com"],
+              ["blocked_senders", "Never reply to these senders", "noreply@example.com, @lists.example.com"],
+              ["include_keywords", "Require one of these keywords (optional)", "meeting, availability"],
+              ["exclude_keywords", "Never reply when these keywords appear", "unsubscribe, confidential"],
+            ] as const).map(([key, label, placeholder]) => <label key={key} className="text-[10px] text-muted">{label}<input className="input mt-1 h-9 w-full text-xs" value={autoReplyRules[key]} placeholder={placeholder} onChange={(event) => setAutoReplyRules({ ...autoReplyRules, [key]: event.target.value })} /></label>)}
+          </div>
+          <Button className="mt-3" disabled={busy !== null} onClick={() => void saveAutoReplyRules()}>Save reply rules</Button>
+          <div className="mt-5 border-t border-line pt-4">
+            <h3 className="text-xs font-semibold">Reply activity · latest {autoReplyActivity.length}</h3>
+            {autoReplyActivity.length === 0 ? <p className="mt-2 text-[10px] text-muted">No automatic reply activity yet.</p> : <div className="mt-2 space-y-2">{autoReplyActivity.map((activity) => <div key={activity.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line p-3"><div className="min-w-0"><p className="truncate text-[11px] font-medium">{activity.email_subject || "(no subject)"}</p><p className="truncate text-[10px] text-muted">{activity.email_sender} · {dateLabel(activity.created_at)}</p></div><span className="rounded bg-soft px-2 py-1 text-[9px] uppercase">{activity.status.replaceAll("_", " ")}{activity.reason_code ? ` · ${activity.reason_code.replaceAll("_", " ")}` : ""}</span></div>)}</div>}
+          </div>
+        </>}
+      </Card>
       <div className="mt-5 grid gap-5 xl:grid-cols-2">
         <Card className="p-5">
           <div className="mb-3 flex items-center justify-between">
@@ -431,7 +545,7 @@ export default function AutomationPage() {
         </Card>
       </div>
       <p className="mt-5 rounded-xl border border-dashed border-line p-4 text-[11px] leading-5 text-muted">
-        Scheduled jobs are processed by a separate database-backed worker. They are user-scoped, deduplicated and retried with bounded backoff. Gmail operations stay read-only; follow-up notices are suggestions and do not send or modify messages.
+        Scheduled jobs and automatic reply cycles are processed by the separate database-backed worker. Reply automation is off until explicitly enabled. Sending remains separately disabled unless you confirm automatic sending. Sensitive exclusions, duplicate prevention, daily caps and activity records apply.
       </p>
     </div>
   );

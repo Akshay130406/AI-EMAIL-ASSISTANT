@@ -26,11 +26,11 @@ def configure_gmail(monkeypatch):
     monkeypatch.setenv("GOOGLE_CLIENT_ID", "test-client-id")
     monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "test-client-secret")
     monkeypatch.setenv(
-        "GOOGLE_REDIRECT_URI", "http://localhost:8000/api/auth/google/callback"
+        "GOOGLE_REDIRECT_URI", "http://localhost:8002/api/auth/google/callback"
     )
     monkeypatch.setenv(
         "GMAIL_REDIRECT_URI",
-        "http://localhost:8000/api/integrations/gmail/callback",
+        "http://localhost:8002/api/integrations/gmail/callback",
     )
     monkeypatch.setenv("TOKEN_ENCRYPTION_KEY", key)
     monkeypatch.setenv("TOKEN_ENCRYPTION_KEY_ID", "test-key")
@@ -281,6 +281,17 @@ def test_gmail_parser_tolerates_missing_and_malformed_fields():
     assert parsed["body"] == ""
 
 
+def test_gmail_parser_marks_attachment_messages_for_safe_auto_reply_exclusion():
+    parsed = gmail_service.parse_gmail_message({
+        "id": "message-with-attachment",
+        "payload": {"mimeType": "multipart/mixed", "parts": [
+            {"mimeType": "text/plain", "body": {"data": "SGVsbG8"}},
+            {"mimeType": "application/pdf", "filename": "statement.pdf", "body": {"attachmentId": "private-id"}},
+        ]},
+    })
+    assert parsed["has_attachments"] is True
+
+
 @pytest.mark.parametrize(
     ("status_code", "error_type"),
     [
@@ -302,6 +313,20 @@ def test_gmail_http_errors_are_mapped_without_leaking_provider_details(
 
     with pytest.raises(error_type):
         gmail_service._execute(FailedRequest())
+
+
+def test_gmail_api_disabled_error_is_actionable_and_logs_only_reason_code(caplog):
+    class FailedRequest:
+        def execute(self, num_retries=0):
+            raise HttpError(
+                httplib2.Response({"status": "403"}),
+                b'{"error":{"errors":[{"reason":"accessNotConfigured"}],"message":"private response detail"}}',
+            )
+
+    with pytest.raises(gmail_service.GmailAPINotEnabled):
+        gmail_service._execute(FailedRequest())
+    assert "accessNotConfigured" in caplog.text
+    assert "private response detail" not in caplog.text
 
 
 def test_gmail_oauth_requires_authenticated_user_pkce_and_readonly_scope(

@@ -54,13 +54,13 @@ def test_health_endpoint_allows_local_frontend_origin() -> None:
         "OPTIONS",
         "/api/health",
         {
-            "Origin": "http://localhost:5173",
+            "Origin": "http://localhost:5174",
             "Access-Control-Request-Method": "GET",
         },
     )
 
     assert response.status_code == 200
-    assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
+    assert response.headers["access-control-allow-origin"] == "http://localhost:5174"
 
 
 def test_mutating_api_preflight_allows_patch_from_local_frontend() -> None:
@@ -68,14 +68,14 @@ def test_mutating_api_preflight_allows_patch_from_local_frontend() -> None:
         "OPTIONS",
         "/api/emails/00000000-0000-0000-0000-000000000000",
         {
-            "Origin": "http://localhost:5173",
+            "Origin": "http://localhost:5174",
             "Access-Control-Request-Method": "PATCH",
             "Access-Control-Request-Headers": "content-type",
         },
     )
 
     assert response.status_code == 200
-    assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
+    assert response.headers["access-control-allow-origin"] == "http://localhost:5174"
     assert "PATCH" in response.headers["access-control-allow-methods"]
     assert response.headers["access-control-allow-credentials"] == "true"
     assert "x-csrf-token" in response.headers["access-control-allow-headers"].lower()

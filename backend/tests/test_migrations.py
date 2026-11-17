@@ -40,6 +40,8 @@ def test_initial_migration_creates_schema_and_is_current(tmp_path, monkeypatch):
             "notifications",
             "user_sessions",
             "oauth_transactions",
+            "auto_reply_settings",
+            "auto_reply_activities",
             "alembic_version",
         }.issubset(set(inspector.get_table_names()))
         assert {
@@ -56,7 +58,7 @@ def test_initial_migration_creates_schema_and_is_current(tmp_path, monkeypatch):
         }.issubset(
             {column["name"] for column in inspector.get_columns("connected_accounts")}
         )
-        assert {"source", "html_body", "is_sent"}.issubset(
+        assert {"source", "html_body", "is_sent", "has_attachments"}.issubset(
             {column["name"] for column in inspector.get_columns("emails")}
         )
         draft_columns = {

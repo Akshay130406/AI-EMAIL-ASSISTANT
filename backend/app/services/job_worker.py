@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, aliased, sessionmaker
 
 from app.models import AutomationRule, BackgroundJob, Email, Notification, User
 from app.services import ai
+from app.services import auto_reply
 from app.services import automation as automation_service
 from app.services import gmail
 
@@ -295,6 +296,7 @@ def run_worker(
     while True:
         with factory() as session:
             automation_service.enqueue_due_automations(session)
+        auto_reply.run_due(factory)
         claim = claim_next_job(factory)
         if claim is None:
             if once:

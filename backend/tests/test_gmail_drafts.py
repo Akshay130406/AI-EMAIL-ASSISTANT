@@ -19,8 +19,8 @@ def _configure_gmail(monkeypatch):
     key = base64.urlsafe_b64encode(b"0123456789abcdef0123456789abcdef").decode()
     monkeypatch.setenv("GOOGLE_CLIENT_ID", "test-client-id")
     monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "test-client-secret")
-    monkeypatch.setenv("GMAIL_REDIRECT_URI", "http://localhost:8000/api/integrations/gmail/callback")
-    monkeypatch.setenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/api/auth/google/callback")
+    monkeypatch.setenv("GMAIL_REDIRECT_URI", "http://localhost:8002/api/integrations/gmail/callback")
+    monkeypatch.setenv("GOOGLE_REDIRECT_URI", "http://localhost:8002/api/auth/google/callback")
     monkeypatch.setenv("TOKEN_ENCRYPTION_KEY", key)
     monkeypatch.setenv("TOKEN_ENCRYPTION_KEY_ID", "test-key")
 

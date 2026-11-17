@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import AutomationPage from "./AutomationPage";
 import type {
   AutomationRecord,
+  AutoReplySettings,
   BackgroundJobRecord,
   GmailStatus,
   NotificationRecord,
@@ -12,12 +13,16 @@ import type {
 const api = vi.hoisted(() => ({
   cancelBackgroundJob: vi.fn(),
   createAutomation: vi.fn(),
+  emergencyOffAutoReplies: vi.fn(),
+  getAutoReplyActivity: vi.fn(),
+  getAutoReplySettings: vi.fn(),
   getGmailStatus: vi.fn(),
   listAutomations: vi.fn(),
   listBackgroundJobs: vi.fn(),
   listNotifications: vi.fn(),
   runAutomation: vi.fn(),
   updateAutomation: vi.fn(),
+  updateAutoReplySettings: vi.fn(),
   updateNotification: vi.fn(),
 }));
 
@@ -70,6 +75,23 @@ const notification: NotificationRecord = {
   created_at: "2030-01-01T10:00:00Z",
 };
 
+const autoReplySettings: AutoReplySettings = {
+  enabled: false,
+  automatic_sending_enabled: false,
+  mode: "off",
+  interval_minutes: 15,
+  daily_limit: 5,
+  reply_required_only: true,
+  exclude_sensitive: true,
+  allowed_senders: [],
+  blocked_senders: [],
+  include_keywords: [],
+  exclude_keywords: [],
+  next_run_at: null,
+  gmail_connected: true,
+  compose_enabled: true,
+};
+
 function renderPage() {
   return render(
     <MemoryRouter>
@@ -82,6 +104,8 @@ describe("Automation page", () => {
   beforeEach(() => {
     Object.values(api).forEach((mock) => mock.mockReset());
     api.getGmailStatus.mockResolvedValue(gmail);
+    api.getAutoReplySettings.mockResolvedValue(autoReplySettings);
+    api.getAutoReplyActivity.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 10 });
     api.listAutomations.mockResolvedValue([rule]);
     api.listBackgroundJobs.mockResolvedValue({
       items: [job],
@@ -97,6 +121,12 @@ describe("Automation page", () => {
       page_size: 10,
     });
     api.updateAutomation.mockResolvedValue({ ...rule, enabled: false });
+    api.updateAutoReplySettings.mockImplementation((patch) => Promise.resolve({
+      ...autoReplySettings,
+      ...patch,
+      mode: patch.enabled === false ? "off" : patch.enabled ? (patch.automatic_sending_enabled ? "automatic_send" : "draft") : autoReplySettings.mode,
+    }));
+    api.emergencyOffAutoReplies.mockResolvedValue(autoReplySettings);
     api.createAutomation.mockResolvedValue({
       ...rule,
       id: "automation-2",
@@ -145,5 +175,15 @@ describe("Automation page", () => {
     );
     expect(await screen.findByText(/0 unread/)).toBeTruthy();
     expect(api.updateNotification).toHaveBeenCalledWith(notification.id, true);
+  });
+
+  it("requires a separate explicit confirmation before automatic sending is enabled", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    api.getAutoReplySettings.mockResolvedValue({ ...autoReplySettings, enabled: true, mode: "draft" });
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Enable automatic sending…" }));
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(api.updateAutoReplySettings).not.toHaveBeenCalled();
+    confirm.mockRestore();
   });
 });

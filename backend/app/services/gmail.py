@@ -247,6 +247,19 @@ def parse_gmail_message(message: dict[str, object]) -> dict[str, object]:
         ", ".join(filter(None, (_header(headers, "To"), _header(headers, "Cc"))))
     )
     body, html_body = _extract_mime_bodies(payload)
+    pending_parts = [payload]
+    has_attachments = False
+    while pending_parts:
+        part = pending_parts.pop()
+        if (isinstance(part.get("filename"), str) and part.get("filename")) or (
+            isinstance(part.get("body"), dict)
+            and part["body"].get("attachmentId")
+        ):
+            has_attachments = True
+            break
+        children = part.get("parts")
+        if isinstance(children, list):
+            pending_parts.extend(child for child in children if isinstance(child, dict))
     labels = message.get("labelIds")
     label_ids = {label for label in labels if isinstance(label, str)} if isinstance(labels, list) else set()
     received_at = None
@@ -284,6 +297,7 @@ def parse_gmail_message(message: dict[str, object]) -> dict[str, object]:
         "is_sent": "SENT" in label_ids,
         "is_starred": "STARRED" in label_ids,
         "is_priority": "IMPORTANT" in label_ids,
+        "has_attachments": has_attachments,
         "received_at": received_at,
     }
 
@@ -433,13 +447,18 @@ def _execute(request: ResourceRequest) -> dict[str, object]:
     except HttpError as error:
         response = getattr(error, "resp", None)
         code = getattr(response, "status", None)
+        reasons = _google_error_reasons(error)
+        logger.warning(
+            "Gmail API request rejected (status=%s, reason_codes=%s)",
+            code,
+            ",".join(sorted(reasons)) or "unspecified",
+        )
         if code == 401:
             raise GmailReauthorizationRequired from error
         if code == 404:
             raise GmailHistoryExpired from error
         if code == 429:
             raise GmailRateLimited from error
-        reasons = _google_error_reasons(error)
         if reasons.intersection({"accessNotConfigured"}):
             raise GmailAPINotEnabled from error
         if reasons.intersection({"authError", "insufficientPermissions"}):

@@ -12,6 +12,8 @@ import type {
   AutomationKind,
   AutomationRecord,
   AnalyticsOverview,
+  AutoReplyActivityPage,
+  AutoReplySettings,
   BackgroundJobRecord,
   CalendarAvailability,
   CalendarListResponse,
@@ -37,7 +39,7 @@ import type {
 } from "../types/api";
 import type { AuthMeResponse } from "../types/auth";
 
-const apiUrl = (import.meta.env.VITE_API_URL || "http://127.0.0.1:8002").replace(
+const apiUrl = (import.meta.env.VITE_API_URL || "http://localhost:8002").replace(
   /\/$/,
   "",
 );
@@ -59,20 +61,21 @@ export class APIError extends Error {
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
-  if (
-    csrfToken &&
-    ["POST", "PATCH", "PUT", "DELETE"].includes((init?.method || "GET").toUpperCase())
-  ) {
+  const isUnsafe = ["POST", "PATCH", "PUT", "DELETE"].includes(
+    (init?.method || "GET").toUpperCase(),
+  );
+  if (csrfToken && isUnsafe) {
     headers.set("X-CSRF-Token", csrfToken);
   }
   if (init?.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
-  const response = await fetch(`${apiUrl}/api${path}`, {
+  const send = () => fetch(`${apiUrl}/api${path}`, {
     ...init,
     headers,
     credentials: "include",
   });
+  let response = await send();
   if (!response.ok) {
     let message = `Request failed with HTTP ${response.status}`;
     try {
@@ -80,6 +83,37 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       if (typeof error.detail === "string") message = error.detail;
     } catch {
       // Keep the status-based message for non-JSON responses.
+    }
+    // A session can be refreshed in another tab while this tab keeps an old
+    // in-memory CSRF token. The CSRF dependency rejects before route execution,
+    // so refreshing the token and retrying this one rejected request is safe.
+    if (response.status === 403 && message === "CSRF validation failed" && isUnsafe) {
+      try {
+        const sessionResponse = await fetch(`${apiUrl}/api/auth/me`, {
+          credentials: "include",
+        });
+        if (sessionResponse.ok) {
+          const current = (await sessionResponse.json()) as { csrf_token?: unknown };
+          if (typeof current.csrf_token === "string" && current.csrf_token) {
+            setCsrfToken(current.csrf_token);
+            headers.set("X-CSRF-Token", current.csrf_token);
+            response = await send();
+            if (response.ok) {
+              if (response.status === 204) return undefined as T;
+              return (await response.json()) as T;
+            }
+            message = `Request failed with HTTP ${response.status}`;
+            try {
+              const retryError = (await response.json()) as { detail?: unknown };
+              if (typeof retryError.detail === "string") message = retryError.detail;
+            } catch {
+              // Preserve the status-based message for a non-JSON response.
+            }
+          }
+        }
+      } catch {
+        // Preserve the original CSRF error if token recovery itself fails.
+      }
     }
     throw new APIError(message, response.status);
   }
@@ -253,6 +287,27 @@ export function sendGmailDraft(draftId: string): Promise<GmailSendStatus> {
 
 export function syncGmail(): Promise<GmailSyncResult> {
   return request<GmailSyncResult>("/integrations/gmail/sync", { method: "POST" });
+}
+
+export function getAutoReplySettings(): Promise<AutoReplySettings> {
+  return request<AutoReplySettings>("/auto-replies/settings");
+}
+
+export function updateAutoReplySettings(
+  patch: Partial<Omit<AutoReplySettings, "mode" | "gmail_connected" | "compose_enabled" | "next_run_at">> & { confirm_automatic_sending?: boolean },
+): Promise<AutoReplySettings> {
+  return request<AutoReplySettings>("/auto-replies/settings", {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+}
+
+export function emergencyOffAutoReplies(): Promise<AutoReplySettings> {
+  return request<AutoReplySettings>("/auto-replies/emergency-off", { method: "POST" });
+}
+
+export function getAutoReplyActivity(pageSize = 25): Promise<AutoReplyActivityPage> {
+  return request<AutoReplyActivityPage>(`/auto-replies/activity?page_size=${pageSize}`);
 }
 
 export function disconnectGmail(): Promise<void> {

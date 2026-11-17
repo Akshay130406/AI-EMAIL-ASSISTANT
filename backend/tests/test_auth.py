@@ -9,6 +9,7 @@ from app.api.dependencies import SESSION_COOKIE_NAME
 from app.api.routes.auth import OAUTH_STATE_COOKIE_NAME
 from app.core.config import (
     ConfigurationError,
+    get_frontend_url,
     validate_production_config,
     validate_runtime_config,
 )
@@ -25,9 +26,9 @@ def configure_google(monkeypatch):
     monkeypatch.setenv("GOOGLE_CLIENT_ID", "test-client-id")
     monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "test-client-secret")
     monkeypatch.setenv(
-        "GOOGLE_REDIRECT_URI", "http://127.0.0.1:8000/api/auth/google/callback"
+        "GOOGLE_REDIRECT_URI", "http://localhost:8002/api/auth/google/callback"
     )
-    monkeypatch.setenv("FRONTEND_URL", "http://localhost:5173")
+    monkeypatch.setenv("FRONTEND_URL", "http://localhost:5174")
 
 
 def start_oauth(client):
@@ -89,7 +90,7 @@ def test_callback_handles_provider_cancellation(client, monkeypatch):
     )
 
     assert response.status_code == 303
-    assert response.headers["location"] == "http://localhost:5173/login?auth_error=cancelled"
+    assert response.headers["location"] == "http://localhost:5174/login?auth_error=cancelled"
     assert OAUTH_STATE_COOKIE_NAME in response.headers["set-cookie"]
     assert login_response.cookies.get(OAUTH_STATE_COOKIE_NAME) == state
 
@@ -194,7 +195,7 @@ def test_successful_callback_links_identity_rotates_session_and_returns_safe_pro
     )
 
     assert callback.status_code == 303
-    assert callback.headers["location"] == "http://localhost:5173"
+    assert callback.headers["location"] == "http://localhost:5174"
     assert "access_token" not in callback.text
     assert "refresh_token" not in callback.text
     assert "httponly" in callback.headers["set-cookie"].lower()
@@ -265,7 +266,7 @@ def test_existing_google_identity_resolves_to_its_existing_owner(
     )
 
     assert response.status_code == 303
-    assert response.headers["location"] == "http://localhost:5173"
+    assert response.headers["location"] == "http://localhost:5174"
     client.set_session(response.cookies.get(SESSION_COOKIE_NAME), None)
     me = client.get("/api/auth/me")
     assert me.status_code == 200
@@ -331,7 +332,7 @@ def test_oauth_database_failure_redirects_to_recoverable_login_error(client, mon
 
     assert response.status_code == 303
     assert response.headers["location"] == (
-        "http://localhost:5173/login?auth_error=service_unavailable"
+        "http://localhost:5174/login?auth_error=service_unavailable"
     )
     assert "database detail" not in response.text
 
@@ -345,7 +346,7 @@ def test_invalid_frontend_redirect_uses_safe_local_fallback(client, monkeypatch)
     response = auth._login_error_redirect("sign_in_failed")
 
     assert response.headers["location"] == (
-        "http://127.0.0.1:5174/login?auth_error=sign_in_failed"
+        "http://localhost:5174/login?auth_error=sign_in_failed"
     )
     assert "provider detail" not in response.headers["location"]
 
@@ -455,3 +456,10 @@ def test_runtime_cors_rejects_wildcard_origins(monkeypatch):
     monkeypatch.setenv("ALLOWED_ORIGINS", "*")
     with pytest.raises(ConfigurationError):
         validate_runtime_config()
+
+
+def test_local_frontend_default_matches_the_localhost_site(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "development")
+    monkeypatch.delenv("FRONTEND_URL", raising=False)
+
+    assert get_frontend_url() == "http://localhost:5174"

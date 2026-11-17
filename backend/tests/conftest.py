@@ -44,7 +44,7 @@ class APIClient:
             if self.session_token:
                 cookies[SESSION_COOKIE_NAME] = self.session_token
             if method.upper() in {"POST", "PATCH", "PUT", "DELETE"}:
-                headers.setdefault("Origin", "http://localhost:5173")
+                headers.setdefault("Origin", "http://localhost:5174")
                 if self.csrf_token:
                     headers.setdefault("X-CSRF-Token", self.csrf_token)
             async with httpx.AsyncClient(
@@ -96,7 +96,7 @@ def client(
     )
     monkeypatch.setenv(
         "ALLOWED_ORIGINS",
-        "http://localhost:5173,http://127.0.0.1:5173",
+        "http://localhost:5174,http://127.0.0.1:5174",
     )
 
     def get_test_db() -> Iterator[Session]:

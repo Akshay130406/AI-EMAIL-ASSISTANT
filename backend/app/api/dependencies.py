@@ -1,4 +1,5 @@
 import hmac
+import logging
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, status
@@ -10,6 +11,7 @@ from app.models import User, UserSession
 from app.services.auth import find_active_session, token_digest
 
 SESSION_COOKIE_NAME = "mailmind_session"
+logger = logging.getLogger(__name__)
 
 
 def get_current_auth_session(
@@ -57,7 +59,21 @@ def require_csrf(
 ) -> User:
     origin = request.headers.get("origin", "").rstrip("/")
     csrf_token = request.headers.get("x-csrf-token", "")
-    if not origin or origin not in get_cors_origins() or not csrf_token:
+    allowed_origins = get_cors_origins()
+    if not origin:
+        logger.warning("CSRF validation rejected request (missing_origin)")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="CSRF validation failed",
+        )
+    if origin not in allowed_origins:
+        logger.warning("CSRF validation rejected request (origin_not_allowed)")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="CSRF validation failed",
+        )
+    if not csrf_token:
+        logger.warning("CSRF validation rejected request (missing_token)")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="CSRF validation failed",
@@ -72,6 +88,7 @@ def require_csrf(
             detail="Authentication is not configured",
         ) from error
     if not valid_token:
+        logger.warning("CSRF validation rejected request (token_mismatch)")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="CSRF validation failed",

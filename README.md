@@ -53,10 +53,10 @@ frontend origin to **Authorized JavaScript origins** and the exact backend
 callback URIs to **Authorized redirect URIs**:
 
 ```text
-Local origin:   http://127.0.0.1:5174
-Login callback: http://127.0.0.1:8002/api/auth/google/callback
-Gmail callback: http://127.0.0.1:8002/api/integrations/gmail/callback
-Calendar callback: http://127.0.0.1:8002/api/integrations/calendar/callback
+Local origin:   http://localhost:5174
+Login callback: http://localhost:8002/api/auth/google/callback
+Gmail callback: http://localhost:8002/api/integrations/gmail/callback
+Calendar callback: http://localhost:8002/api/integrations/calendar/callback
 ```
 
 Normal sign-in requests only `openid email profile`. Gmail connection is a
@@ -89,7 +89,7 @@ further action.
 
 Create `backend/.env` from the example only when it does not already exist;
 update local settings without overwriting an existing environment file. Set
-`frontend/.env` to `VITE_API_URL=http://127.0.0.1:8002` for this local setup.
+`frontend/.env` to `VITE_API_URL=http://localhost:8002` for this local setup.
 Generate `SESSION_SECRET` with a secure random generator (at least 32
 characters); use a different value in every environment. The configured
 `GOOGLE_REDIRECT_URI`, `GMAIL_REDIRECT_URI`, and `CALENDAR_REDIRECT_URI` must
@@ -131,7 +131,7 @@ npm install
 npm run dev
 ```
 
-Open `http://127.0.0.1:5174` and use this exact host consistently for local
+Open `http://localhost:5174` and use this exact host consistently for local
 OAuth and session cookies. Stop and restart Vite with Ctrl+C and the same
 command. Vite is configured to fail if port 5174 is already occupied. Check
 backend health, readiness, and docs on port 8002.
@@ -348,6 +348,8 @@ without automatic retries to avoid duplicate charges.
   `POST /api/automations/{automation_id}/run`,
   `GET /api/jobs`, `POST /api/jobs/{job_id}/cancel`,
   `GET /api/notifications`, `PATCH /api/notifications/{notification_id}`
+- Automatic replies: `GET/PATCH /api/auto-replies/settings`,
+  `GET /api/auto-replies/activity`, `POST /api/auto-replies/emergency-off`
 - Analytics: `GET /api/analytics/overview?period_days=7` (7–90 days)
 - Email list/detail routes return Gmail-backed data after a Gmail identity is
   connected; otherwise they return only sample data. Inbox messages are
@@ -363,11 +365,16 @@ without automatic retries to avoid duplicate charges.
 - Data routes require a valid session and remain scoped to that user.
 - Durable automation jobs are processed by a separate worker; scheduled
   automations are disabled until enabled. Job attempts, queue size and manual
-  runs are bounded, and Gmail synchronization remains read-only. Analytics use
+  runs are bounded. Automatic replies are separately off by default and also
+  require the background worker. Draft-only mode creates editable Gmail drafts;
+  automatic sending requires a second confirmation and has sender/keyword
+  filters, an always-on sensitive-content and attachment exclusion, per-message
+  idempotency, a daily send cap and an emergency OFF control. Unknown send
+  outcomes are never retried automatically. Analytics use
   persisted user-scoped messages and identify whether the displayed data is
   Gmail-backed or sample data; unsupported response-rate/productivity metrics
   are intentionally omitted.
-- OpenAPI documentation: `http://127.0.0.1:8002/docs`
+- OpenAPI documentation: `http://localhost:8002/docs`
 - Apply schema changes explicitly with `alembic upgrade head`; application
   startup does not run migrations.
 

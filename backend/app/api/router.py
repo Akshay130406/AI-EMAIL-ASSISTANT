@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.api.routes import (
     analytics,
     ai,
+    auto_replies,
     automation,
     auth,
     calendar,
@@ -27,6 +28,7 @@ api_router.include_router(gmail.router)
 api_router.include_router(gmail_drafts.router)
 api_router.include_router(calendar.router)
 api_router.include_router(ai.router)
+api_router.include_router(auto_replies.router)
 api_router.include_router(drafts.router)
 api_router.include_router(conversations.router)
 api_router.include_router(settings.router)
